@@ -1,9 +1,7 @@
 {
   "name": "uber-clone-platform",
   "private": true,
-  "workspaces": [
-    "services/*"
-  ],
+  "workspaces": ["backend/*"],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

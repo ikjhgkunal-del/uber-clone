@@ -6,44 +6,46 @@
 flowchart LR
     Browser[Customer / driver web app] --> Nginx[Nginx API gateway]
     Nginx --> Auth[Authentication Service]
-    Nginx --> Customer[Customer Service]
+    Nginx --> User[User Service]
     Nginx --> Driver[Driver Service]
     Nginx --> Ride[Ride Service]
     Nginx --> Payment[Payment Service]
     Nginx --> Realtime[Realtime Service]
     Auth --> PG[(PostgreSQL)]
-    Customer --> PG
+    User --> PG
     Driver --> PG
     Ride --> PG
     Payment --> PG
     Driver --> Redis[(Redis)]
     Realtime --> Redis
-    Ride --> Broker[(RabbitMQ)]
-    Broker --> Payment
-    Broker --> Realtime
+    Ride --> Kafka[(Kafka)]
+    Kafka --> Payment
+    Kafka --> Realtime
+    Kafka --> Notify[Notification Service]
 ```
 
 ## Service ownership
 
 | Service | Owns | Main responsibilities |
 | --- | --- | --- |
-| Authentication | `authentication_db` | Accounts, customer/driver roles, credentials, access tokens |
-| Customer | `customer_db` | Customer-specific profile, saved places, preferences |
-| Driver | `driver_db` | Driver and vehicle profiles; Redis holds live availability/location |
-| Ride | `ride_db` | Ride lifecycle, status history, dispatch decisions, event outbox |
-| Payment | `payment_db` | Simulated payment records and processing status |
-| Realtime | No durable database | WebSocket connections and event fan-out |
+| Authentication | `auth` schema | Accounts, credentials, customer/driver roles and tokens |
+| User | `users` schema | Customer profile, saved places and preferences |
+| Driver | `drivers` schema and Redis live state | Driver/vehicle profiles, availability and simulated location |
+| Ride | `rides` schema | Ride lifecycle, dispatch decisions, status history and event outbox |
+| Payment | `payments` schema | Simulated payment records and processing status |
+| Realtime | No durable schema | WebSocket connections and event fan-out |
+| Notification | No durable schema | Consumes domain events and prepares in-app/email notifications |
 
-PostgreSQL runs as one local container with a separate database per stateful service. Each service owns its migrations and tables. IDs that refer to another service are stored as external UUIDs; there are no cross-service foreign keys or direct cross-service database queries.
+PostgreSQL runs as one local container with a schema per stateful service. Each service owns its migrations. IDs referencing another service are stored as external UUIDs; there are no cross-service foreign keys or direct cross-service database queries.
 
 ## Authorization
 
-Authentication issues a signed token identifying the user and their `customer` or `driver` role. Each backend service validates the token and enforces the permissions for its own endpoints. Services also check resource ownership: a customer can access their own rides, and a driver can update only rides assigned to them. Nginx routes requests but does not replace these checks.
+Authentication issues a signed token identifying the account and its `customer` or `driver` role. Each backend service validates the token and enforces permissions for its own endpoints. Services also check resource ownership. Nginx routes requests but does not replace service-level authorization.
 
 ## Event flow
 
-Ride Service records ride state and publishes domain events through RabbitMQ. `RideCompleted` is consumed by Payment Service for an idempotent simulated charge. Realtime Service consumes ride/payment events and sends updates over WebSockets. Driver location messages arrive over WebSocket and update short-lived driver state in Redis through Driver Service.
+Ride Service records ride state and writes domain events to its outbox. A publisher sends events such as `ride.completed` to Kafka. Payment Service processes a completed ride idempotently and publishes the payment result. Realtime and Notification Services consume relevant events; Realtime sends updates to connected clients over WebSockets.
 
-## Local network boundary
+## Local deployment
 
-Only Nginx is exposed on the host at port 8080. Backend services and PostgreSQL/Redis/RabbitMQ communicate on the Compose network. RabbitMQ's management UI is bound to localhost for development.
+Docker Compose runs the backend services, PostgreSQL, Redis, a single-node Kafka broker in KRaft mode, the placeholder web container and Nginx. The Kafka configuration follows Apache Kafka's official single-node Docker example. This setup is for local development and evaluation, not a highly available broker cluster.

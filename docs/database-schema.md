@@ -1,6 +1,6 @@
 # Initial database schema
 
-The SQL initialization scripts in `database/init` create one database per stateful service and its initial tables. PostgreSQL is shared as a local container; each service owns its database and schema changes.
+The SQL migrations are grouped by service under `database/migrations`. Local PostgreSQL uses one database (`uber_clone`) with separate schemas: `auth`, `users`, `drivers`, `rides`, and `payments`.
 
 ## Authentication Service
 
@@ -10,12 +10,12 @@ The SQL initialization scripts in `database/init` create one database per statef
 - `user_roles`: account-to-role assignment
 - `role_permissions`: role-to-capability mapping
 
-Initial permissions distinguish customer actions (such as creating a ride and viewing/cancelling owned rides) from driver actions (such as updating availability and assigned rides). Passwords are stored only as hashes.
+The initial role mappings distinguish customer actions (request rides and access owned rides) from driver actions (update availability and assigned rides). Passwords are stored as hashes.
 
-## Customer Service
+## User Service
 
-- `customer_profiles`: customer-specific profile fields keyed by the Authentication Service's external `user_id`
-- `saved_locations`: label and coordinates owned by a customer
+- `customer_profiles`: customer profile fields keyed by Authentication Service `user_id`
+- `saved_locations`: customer-owned labels and coordinates
 - `customer_preferences`: preference key/value records
 
 ## Driver Service
@@ -23,16 +23,16 @@ Initial permissions distinguish customer actions (such as creating a ride and vi
 - `driver_profiles`: onboarding/profile data keyed by external `user_id`
 - `vehicles`: vehicle details owned by a driver profile
 
-Current online status and simulated coordinates are temporary Redis data, not the durable source of driver identity/profile data.
+Online availability and simulated coordinates are temporary Redis state.
 
 ## Ride Service
 
-- `rides`: customer/driver external IDs, pickup/dropoff coordinates, fare estimate, currency, current state, timestamps
+- `rides`: customer/driver external IDs, pickup/dropoff coordinates, fare estimate, current state and timestamps
 - `ride_status_history`: append-only state transitions
-- `event_outbox`: ride events committed with ride changes and published to RabbitMQ by a worker
+- `event_outbox`: ride events committed with ride changes and published to Kafka
 
 ## Payment Service
 
-- `payments`: external ride ID, amount, currency, simulated provider reference, status, timestamps
+- `payments`: external ride ID, amount, currency, simulated provider reference, status and timestamps
 
-Payment status is independent of ride status. A completed ride can have a pending, succeeded, or failed simulated payment.
+Payment status is independent of ride status. A completed ride can have a pending, succeeded or failed simulated payment.

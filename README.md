@@ -1,53 +1,51 @@
 # Uber Clone
 
-A simulated ride-hailing application built as a full-stack microservices project. Riders request simulated trips; drivers accept them and send simulated locations. No real-world transport or payment is involved.
+A simulated ride-hailing application organized as backend microservices. Customers request simulated trips; drivers accept trips and send simulated locations. No real-world transport or payment is involved.
 
-## First evaluation scope
+## Backend layout
 
-- Six independently runnable backend service projects
-- PostgreSQL database ownership and initial schemas
-- Redis for temporary driver presence/location state
-- RabbitMQ for ride and payment events
-- Docker Compose for local orchestration
-- Nginx as the API gateway and WebSocket proxy
-- Customer and driver roles in one authentication system
+The backend contains seven services: Authentication, User, Driver, Ride, Payment, Realtime, and Notification. PostgreSQL stores durable records in service-owned schemas. Redis holds temporary driver presence/location data. Kafka carries ride and payment events. Nginx routes public HTTP and WebSocket traffic to the API services.
 
-The first service implementations expose health endpoints and the Realtime Service exposes a basic WebSocket endpoint. Business workflows will be added in small increments.
+At this stage the services are scaffolds: each exposes health/readiness routes, and Realtime exposes a basic WebSocket handshake. Domain endpoints and event consumers will be added incrementally.
+
+See [docs/architecture.md](docs/architecture.md) and [docs/database-schema.md](docs/database-schema.md).
 
 ## Prerequisites
 
 - Node.js 22 or later and npm
 - Git
 - Docker Desktop for Windows, running with Linux containers enabled
-- VS Code (or another editor)
+- VS Code or another editor
 
-Copy `.env.example` to `.env`. The sample passwords are for local development only. Then run:
+Copy `.env.example` to `.env`, then run from the repository root:
 
 ```powershell
 npm install
 docker compose up --build
 ```
 
-The gateway is available at `http://localhost:8080`. Its health endpoint is `http://localhost:8080/health`. RabbitMQ's local management UI is available at `http://localhost:15672` using the credentials from `.env`.
+The web placeholder and API gateway are available at `http://localhost:8080`. Kafka is available to host tools at `localhost:9092`; backend containers use `kafka:19092`.
 
-To build and type-check the service projects:
+## Build and schema files
 
 ```powershell
 npm run build
 npm run typecheck
 ```
 
-PostgreSQL initializes five service-owned databases when its data volume is first created. Initialization scripts run only for a fresh volume. For a clean local reinitialization, stop Compose and remove the `postgres_data` volume with `docker compose down -v`.
+Initial PostgreSQL migrations are organized under `database/migrations`. They are mounted into the PostgreSQL container at `/migrations` and are not automatically applied yet. Each migration sets its service-owned schema (`auth`, `users`, `drivers`, `rides`, or `payments`).
 
-## Service routes
+For local schema setup, apply each SQL file from a PowerShell terminal with `docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U uber -d uber_clone -f /migrations/<service>/001_initial.sql`.
 
-| Gateway path | Backend |
+## Gateway routes
+
+| Gateway path | Service |
 | --- | --- |
 | `/api/auth/` | Authentication Service |
-| `/api/customers/` | Customer Service |
+| `/api/users/` | User Service |
 | `/api/drivers/` | Driver Service |
 | `/api/rides/` | Ride Service |
 | `/api/payments/` | Payment Service |
 | `/ws` | Realtime Service WebSocket |
 
-See [docs/architecture.md](docs/architecture.md) and [docs/database-schema.md](docs/database-schema.md) for the initial design.
+Notification Service is an internal event consumer and has no public gateway route.
