@@ -2,6 +2,7 @@ FROM node:22-alpine AS build
 
 WORKDIR /workspace
 COPY package.json package-lock.json ./
+COPY tsconfig.base.json ./
 COPY services ./services
 RUN npm ci
 
