@@ -1,0 +1,233 @@
+name: uber-clone
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: unless-stopped
+  networks:
+    - backend
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - "fetch('http://127.0.0.1:' + process.env.PORT + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 10s
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-uber}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-local-password}
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-uber}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-this-local-password}
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  authentication-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: authentication-service
+    environment:
+      SERVICE_NAME: authentication-service
+      PORT: 3001
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${AUTH_DATABASE_URL:-postgres://${POSTGRES_USER:-uber}:${POSTGRES_PASSWORD:-localdev2026}@postgres:5432/authentication_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  customer-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: customer-service
+    environment:
+      SERVICE_NAME: customer-service
+      PORT: 3002
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${CUSTOMER_DATABASE_URL:-postgres://${POSTGRES_USER:-uber}:${POSTGRES_PASSWORD:-localdev2026}@postgres:5432/customer_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  driver-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: driver-service
+    environment:
+      SERVICE_NAME: driver-service
+      PORT: 3003
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${DRIVER_DATABASE_URL:-postgres://${POSTGRES_USER:-uber}:${POSTGRES_PASSWORD:-localdev2026}@postgres:5432/driver_db}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ride-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: ride-service
+    environment:
+      SERVICE_NAME: ride-service
+      PORT: 3004
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${RIDE_DATABASE_URL:-postgres://${POSTGRES_USER:-uber}:${POSTGRES_PASSWORD:-localdev2026}@postgres:5432/ride_db}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-uber}:${RABBITMQ_PASSWORD:-localdev2026}@rabbitmq:5672}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: payment-service
+    environment:
+      SERVICE_NAME: payment-service
+      PORT: 3005
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${PAYMENT_DATABASE_URL:-postgres://${POSTGRES_USER:-uber}:${POSTGRES_PASSWORD:-localdev2026}@postgres:5432/payment_db}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-uber}:${RABBITMQ_PASSWORD:-localdev2026}@rabbitmq:5672}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  realtime-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: docker/service.Dockerfile
+      args:
+        SERVICE_NAME: realtime-service
+    environment:
+      SERVICE_NAME: realtime-service
+      PORT: 3006
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USER:-uber}:${RABBITMQ_PASSWORD:-localdev2026}@rabbitmq:5672}
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    depends_on:
+      authentication-service:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+      driver-service:
+        condition: service_healthy
+      ride-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      realtime-service:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_HTTP_PORT:-8080}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/proxy_params:/etc/nginx/proxy_params:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  backend:
+    driver: bridge
