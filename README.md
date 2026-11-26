@@ -30,3 +30,17 @@ npm run typecheck
 ```
 
 Database migrations and seed data will be added incrementally under their service folders.
+
+## Authentication increment
+
+The Authentication Service now supports `POST /register`, `POST /login`, `GET /me`, and role-protected `GET /access/customer` and `GET /access/driver`. Gateway paths have the `/api/auth` prefix. Registration accepts `email`, a password of 12–128 characters, and `role` (`customer` or `driver`). Passenger is the UI label for customer.
+
+Passwords use salted scrypt hashes. Signed access tokens expire after 15 minutes. The frontend keeps the token in memory; refreshing or signing out clears the local session. Refresh tokens, server-side logout/revocation, driver approval, and authorization in the remaining services are future increments.
+
+Set a random `JWT_SECRET` of at least 32 characters in the ignored root `.env`. Start PostgreSQL with `docker compose up -d postgres`, then apply the auth migration:
+
+```powershell
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U uber -d uber_clone -f /migrations/auth/001_initial.sql
+```
+
+The full backend stack can be started with `docker compose up --build`. In another terminal, run `npm install` and `npm run dev` inside `frontend`. Vite proxies `/api` to the gateway at port 8080. The auth schema migration is currently applied manually; automatic versioned migration execution is pending.

@@ -1,26 +1,28 @@
-import cors from "@fastify/cors";
-import helmet from "@fastify/helmet";
-import Fastify from "fastify";
-
-const serviceName = process.env.SERVICE_NAME ?? "auth-service";
-const port = Number(process.env.PORT ?? 3001);
-const app = Fastify({ logger: true, trustProxy: true });
-
+import Fastify, { type FastifyError } from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
+import { pool } from './auth.model.js';
+import { authRoutes } from './auth.routes.js';
+const secret = process.env.JWT_SECRET;
+if (!secret || secret.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
+const app = Fastify({ logger: { redact: ['req.headers.authorization'] }, bodyLimit: 16384 });
 await app.register(helmet);
-await app.register(cors, {
-  origin: process.env.CORS_ORIGIN?.split(",") ?? false,
-  credentials: true,
+await app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',') ?? false });
+await app.register(rateLimit, { max: 30, timeWindow: '1 minute' });
+await app.register(jwt, { secret, sign: { expiresIn: '15m', iss: 'uber-auth', aud: 'uber-api' }, verify: { allowedIss: 'uber-auth', allowedAud: 'uber-api' } });
+app.get('/health', async () => ({ service: 'auth-service', status: 'ok' }));
+app.get('/ready', async (_, reply) => {
+  try { await pool.query('SELECT 1 FROM auth.users LIMIT 1'); return { status: 'ready' }; }
+  catch { return reply.code(503).send({ status: 'unavailable' }); }
 });
-
-app.get("/", async () => ({ service: serviceName, status: "running" }));
-app.get("/health", async () => ({ service: serviceName, status: "ok" }));
-app.get("/ready", async () => ({ service: serviceName, status: "ready" }));
-
-await app.listen({ host: "0.0.0.0", port });
-app.log.info({ service: serviceName, port }, "service started");
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    void app.close();
-  });
-}
+await app.register(authRoutes);
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+  const failure = error as FastifyError;
+  reply.code(failure.statusCode && failure.statusCode < 500 ? failure.statusCode : 500).send({ message: failure.validation ? 'Invalid request' : 'Request failed' });
+});
+app.addHook('onClose', async () => { await pool.end(); });
+await app.listen({ host: '0.0.0.0', port: Number(process.env.PORT ?? 3001) });
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => { void app.close(); });

@@ -1,1 +1,1 @@
-// TODO: Register authentication endpoints and their role/access policies.
+export { registerAuthEndpoints as authRoutes } from './auth.controller.js';

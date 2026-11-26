@@ -117,6 +117,7 @@ services:
     environment:
       SERVICE_NAME: auth-service
       PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 characters)}
       DB_SCHEMA: auth
       DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
