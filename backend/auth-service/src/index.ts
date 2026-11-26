@@ -7,7 +7,7 @@ import { pool } from './auth.model.js';
 import { authRoutes } from './auth.routes.js';
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32) throw new Error('JWT_SECRET must contain at least 32 characters');
-const app = Fastify({ logger: { redact: ['req.headers.authorization'] }, bodyLimit: 16384 });
+const app = Fastify({ logger: { redact: ['req.headers.authorization', 'req.headers.cookie', 'password', 'password_hash', 'token'] }, bodyLimit: 16384 });
 await app.register(helmet);
 await app.register(cors, { origin: process.env.CORS_ORIGIN?.split(',') ?? false });
 await app.register(rateLimit, { max: 30, timeWindow: '1 minute' });

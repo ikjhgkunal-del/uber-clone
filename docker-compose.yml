@@ -44,7 +44,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-uber}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: uber_clone
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
@@ -119,7 +119,7 @@ services:
       PORT: 3001
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 characters)}
       DB_SCHEMA: auth
-      DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
       postgres:
@@ -135,7 +135,7 @@ services:
       SERVICE_NAME: user-service
       PORT: 3002
       DB_SCHEMA: users
-      DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
       postgres:
@@ -151,7 +151,7 @@ services:
       SERVICE_NAME: driver-service
       PORT: 3003
       DB_SCHEMA: drivers
-      DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
@@ -170,7 +170,7 @@ services:
       SERVICE_NAME: ride-service
       PORT: 3004
       DB_SCHEMA: rides
-      DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:19092}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
@@ -189,7 +189,7 @@ services:
       SERVICE_NAME: payment-service
       PORT: 3005
       DB_SCHEMA: payments
-      DATABASE_URL: ${DATABASE_URL:-postgres://uber:localdev2026@postgres:5432/uber_clone}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:19092}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
     depends_on:
