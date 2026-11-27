@@ -29,7 +29,7 @@ export async function createServiceApp(
   const app = Fastify({
     trustProxy: (_address, hop) => hop === 0,
     bodyLimit: 32768,
-    ajv: { customOptions: { removeAdditional: false } },
+    ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
     logger:
       process.env.SERVICE_TEST_MODE === "true"
         ? false
@@ -83,20 +83,18 @@ export async function createServiceApp(
       field: v.instancePath || v.params.missingProperty || "request",
       message: v.message,
     }));
-    reply
-      .code(status)
-      .send({
-        message: failure.validation
-          ? "Please check the fields and try again."
-          : error instanceof ServiceError
-            ? error.message
-            : status === 409
-              ? "That record already exists."
-              : status === 429
-                ? "Too many requests. Please try again shortly."
-                : "Unable to complete the request. Please try again.",
-        ...(details ? { fields: details } : {}),
-      });
+    reply.code(status).send({
+      message: failure.validation
+        ? "Please check the fields and try again."
+        : error instanceof ServiceError
+          ? error.message
+          : status === 409
+            ? "That record already exists."
+            : status === 429
+              ? "Too many requests. Please try again shortly."
+              : "Unable to complete the request. Please try again.",
+      ...(details ? { fields: details } : {}),
+    });
   });
   return app;
 }
@@ -137,11 +135,9 @@ export function requireIdentity(role: "customer" | "driver") {
     )
       throw new ServiceError("Invalid identity response.", 503);
     if (data.user.role !== role)
-      return reply
-        .code(403)
-        .send({
-          message: "This feature is not available for your account role.",
-        });
+      return reply.code(403).send({
+        message: "This feature is not available for your account role.",
+      });
     request.principal = data.user;
   };
 }

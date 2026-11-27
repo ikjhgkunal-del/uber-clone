@@ -40,9 +40,9 @@ Implemented features:
 - Optional Google OAuth code flow with PKCE, state/nonce checks, server-side ID-token verification and provider-subject identity records.
 - Request validation, size limits, rate limits, custom-header/origin CSRF protection, no-store responses and sensitive log redaction.
 
-New accounts may access the account/security screen before verifying their email. Email verification must be required on future booking/driver business endpoints. Passenger profiles now live in the User Service; driver onboarding belongs to the next increment.
+New accounts may access the account/security screen before verifying their email. Email verification must be required on future booking/driver business endpoints. Passenger profiles now live in the User Service; Driver Service owns simulated driver onboarding and availability.
 
-Google credentials are intentionally empty. A password account with the same email is not silently linked to a Google identity: use the password sign-in for that existing account. Account linking, phone OTP, Apple sign-in, MFA and real driver onboarding are not implemented.
+Google credentials are intentionally empty. A password account with the same email is not silently linked to a Google identity: use the password sign-in for that existing account. Account linking, phone OTP, Apple sign-in, MFA and real driver identity/document verification are not implemented.
 
 ## Google sign-in setup
 
@@ -87,6 +87,7 @@ npm run build
 npm run test:auth
 npm run test:auth:gateway
 npm run test:user
+npm run test:driver
 npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
@@ -97,15 +98,15 @@ For public deployment, use HTTPS, `COOKIE_SECURE=true`, the deployed origin/redi
 
 ## Lower resource development
 
-The default Compose stack runs PostgreSQL, Authentication, User Service, the static frontend, Nginx and Mailpit. Other services and their images remain available under the `full` profile.
+The default Compose stack runs PostgreSQL, Redis, Authentication, User Service, Driver Service, the static frontend, Nginx and Mailpit. Other services and their images remain available under the `full` profile.
 
 ```powershell
-# Daily passenger development (6 containers)
+# Daily passenger/driver development (8 containers)
 docker compose up -d
 # Full stack when working on ride/event features
 docker compose --profile full up -d
 # Stop optional services without deleting data
-docker compose --profile full stop driver-service ride-service payment-service realtime-service notification-service redis kafka
+docker compose --profile full stop ride-service payment-service realtime-service notification-service kafka
 # Stop the project when finished (preserves database volumes)
 docker compose --profile full stop
 ```
@@ -140,3 +141,27 @@ All endpoints below use the gateway prefix `/api/users`, a Bearer access token a
 Phone numbers are explicitly unverified. Email changes remain outside this component. Radix Dialog supplies modal focus trapping, Escape and accessibility; React Leaflet/Leaflet supplies maps, loaded only when needed. OpenStreetMap attribution is visible, with a tile-request referrer policy supporting its usage policy. `VITE_MAP_TILE_URL` may select another compatible tile provider; production deployments must follow their provider's terms/capacity limits.
 
 `npm run test:user` exercises PostgreSQL persistence, real Auth session introspection, RBAC, ownership, validation, stale versions, CSRF and concurrent saved-place limits using disposable local fixtures. Build Auth first with `npm run build`. The tests require Auth/gateway and local PostgreSQL running; fixtures never send SMTP email.
+
+## Driver accounts (Driver Service)
+
+Drivers land at `/driver` with a setup checklist, driver details, up to three owned vehicles, availability, a simulated location map and account security. Profiles and vehicles persist in the `drivers.driver_profiles` and `drivers.vehicles` tables inside `uber_clone`. The service introspects active sessions through Auth, requires the driver role, enforces ownership on every vehicle operation, and applies versioned migrations at startup. Profile/vehicle updates use optimistic versions. Per-driver PostgreSQL row locks serialize mutations, including the vehicle limit and selecting one active vehicle. Plate identifiers are normalized and unique; deleting an active vehicle requires choosing another before going online.
+
+Going online requires a verified email, an international-format phone number, a simulated license with a valid unexpired date and an active vehicle. These are simulator readiness checks, not real identity/document approval. Use demo details. Drivers must go offline before changing profiles/vehicles. Phone numbers are not OTP verified. There are no real dispatches, earnings or document uploads.
+
+Redis stores only a short-lived online record (`drivers:online:<identity UUID>`) containing the selected vehicle UUID, demo coordinates and last-update time. Each record has a 90-second expiry. The driver workspace renews it every 20 seconds through authenticated heartbeat requests; location updates also renew it. Renewals use Redis `SET XX` so an expired lease cannot be silently resurrected. Closing the page, a lost connection or background browser throttling lets the lease expire; returning after expiry requires going online again. Sign-out attempts to clear presence, then revokes the Auth session even if Redis is unavailable. Other open driver tabs can keep an online lease alive until they sign out/stop heartbeats. An already-written presence record can remain until its short expiry after session revocation; new requests are rejected immediately by Auth.
+
+All paths below use `/api/drivers`, Bearer authentication and the mutation header/origin policy:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET / PUT | `/me` | Read/update driver details (PUT requires version) |
+| GET / POST | `/me/vehicles` | List/create vehicles (first is automatically active) |
+| PUT / DELETE | `/me/vehicles/:id` | Update/remove an owned vehicle (PUT requires version) |
+| POST | `/me/vehicles/:id/activate` | Select one active vehicle |
+| GET / PUT | `/me/availability` | Read availability/readiness; set online or offline |
+| POST | `/me/heartbeat` | Renew a live online lease |
+| PUT | `/me/location` | Update demo coordinates while online |
+
+Set availability with `{ "online": true, "latitude": 28.6139, "longitude": 77.209 }` or `{ "online": false }`. Location accepts `{ "latitude": 28.63, "longitude": 77.22 }`. Coordinates are validated server-side. Map interaction never requests GPS permission. Redis is required for safe mutation/availability checks; dependency failures return a retryable error and never bypass eligibility. `/ready` checks PostgreSQL and Redis. PostgreSQL and Redis host ports bind only to `127.0.0.1` for local inspection/tests; application service ports remain internal.
+
+Run `npm run test:driver` with the default stack running after `npm run build`. The disposable local fixtures cover roles, session revocation, ownership, validation, stale updates, unique plates, concurrent vehicle limits/activation, expired licenses, email verification, online/offline transitions, heartbeat expiry, simulated movement, Redis outage and a real Nginx API request. No real SMTP messages are sent. Existing authentication and passenger regression tests should also pass.

@@ -1,3 +1,8 @@
+import DriverLayout from "../components/layout/DriverLayout";
+import DriverDashboard from "../pages/driver/Dashboard";
+import DriverProfile from "../pages/driver/Profile";
+import Vehicles from "../pages/driver/Vehicles";
+import Availability from "../pages/driver/Availability";
 import PassengerLayout from "../components/layout/PassengerLayout";
 import PassengerDashboard from "../pages/passenger/Dashboard";
 import PassengerProfile from "../pages/passenger/Profile";
@@ -57,7 +62,13 @@ export default function AppRoutes() {
         </Route>
       </Route>
       <Route element={<RoleRoute role="driver" />}>
-        <Route path="/driver" element={<Account />} />
+        <Route path="/driver" element={<DriverLayout />}>
+          <Route index element={<DriverDashboard />} />
+          <Route path="profile" element={<DriverProfile />} />
+          <Route path="vehicles" element={<Vehicles />} />
+          <Route path="availability" element={<Availability />} />
+          <Route path="security" element={<Account />} />
+        </Route>
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

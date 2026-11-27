@@ -23,7 +23,10 @@ export default function Modal({
           className="modal-content"
           onOpenAutoFocus={(event) => {
             opener.current = document.activeElement;
-            if (window.innerWidth < 600) event.preventDefault();
+            if (window.innerWidth < 600) {
+              event.preventDefault();
+              event.target.focus();
+            }
           }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
