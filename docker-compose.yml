@@ -27,6 +27,7 @@ x-backend-build: &backend-build
     RUN npm ci
     ARG SERVICE_NAME
     RUN npm run build --workspace=@uber-clone/$${SERVICE_NAME}
+    RUN npm ci --omit=dev --workspace=@uber-clone/$${SERVICE_NAME} --include-workspace-root=false
     FROM node:22-alpine AS runtime
     ENV NODE_ENV=production
     WORKDIR /app
@@ -34,6 +35,7 @@ x-backend-build: &backend-build
     COPY --from=build /workspace/node_modules ./node_modules
     COPY --from=build /workspace/backend/$${SERVICE_NAME}/package.json ./package.json
     COPY --from=build /workspace/backend/$${SERVICE_NAME}/dist ./dist
+    COPY database/migrations /app/database/migrations
     USER node
     EXPOSE 3000
     CMD ["node", "dist/index.js"]
@@ -61,6 +63,7 @@ services:
       start_period: 10s
 
   redis:
+    profiles: [full]
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -74,11 +77,26 @@ services:
       timeout: 3s
       retries: 5
 
-  kafka:
+  kafka-volume-init:
+    profiles: [full]
     image: apache/kafka:4.4.0
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c", "chown -R 1000:1000 /var/lib/kafka/data"]
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    network_mode: none
+    restart: "no"
+
+  kafka:
+    profiles: [full]
+    image: apache/kafka:4.4.0
+    depends_on:
+      kafka-volume-init:
+        condition: service_completed_successfully
     hostname: kafka
     restart: unless-stopped
     environment:
+      KAFKA_HEAP_OPTS: "-Xms128m -Xmx256m"
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT_HOST://localhost:9092,PLAINTEXT://kafka:19092"
@@ -94,11 +112,11 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     ports:
       - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
     volumes:
-      - kafka_data:/tmp/kraft-combined-logs
+      - kafka_data:/var/lib/kafka/data
     networks:
       - backend
     healthcheck:
@@ -107,6 +125,15 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+    networks:
+      - backend
 
   auth-service:
     <<: *service-defaults
@@ -118,14 +145,26 @@ services:
       SERVICE_NAME: auth-service
       PORT: 3001
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 characters)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_FROM: ${SMTP_FROM:-Uber Clone <no-reply@example.test>}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/auth/google/callback}
       DB_SCHEMA: auth
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       postgres:
         condition: service_healthy
 
   user-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -136,12 +175,13 @@ services:
       PORT: 3002
       DB_SCHEMA: users
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       postgres:
         condition: service_healthy
 
   driver-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -153,7 +193,7 @@ services:
       DB_SCHEMA: drivers
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       postgres:
         condition: service_healthy
@@ -161,6 +201,7 @@ services:
         condition: service_healthy
 
   ride-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -172,7 +213,7 @@ services:
       DB_SCHEMA: rides
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:19092}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,6 +221,7 @@ services:
         condition: service_healthy
 
   payment-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -191,7 +233,7 @@ services:
       DB_SCHEMA: payments
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:19092}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       postgres:
         condition: service_healthy
@@ -199,6 +241,7 @@ services:
         condition: service_healthy
 
   realtime-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -209,7 +252,7 @@ services:
       PORT: 3006
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:19092}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:8080}
     depends_on:
       redis:
         condition: service_healthy
@@ -217,6 +260,7 @@ services:
         condition: service_healthy
 
   notification-service:
+    profiles: [full]
     <<: *service-defaults
     build:
       <<: *backend-build
@@ -230,24 +274,35 @@ services:
       kafka:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile_inline: |
+        FROM node:22-alpine AS build
+        WORKDIR /app
+        COPY package.json package-lock.json ./
+        RUN npm ci
+        COPY index.html vite.config.js ./
+        COPY src ./src
+        RUN npm run build
+        FROM nginx:stable-alpine
+        COPY --from=build /app/dist /usr/share/nginx/html
+    volumes:
+      - ./infrastructure/nginx/frontend.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - backend
+    restart: unless-stopped
+
   api-gateway:
     image: nginx:stable-alpine
     restart: unless-stopped
     depends_on:
+      frontend:
+        condition: service_started
       auth-service:
         condition: service_healthy
-      user-service:
-        condition: service_healthy
-      driver-service:
-        condition: service_healthy
-      ride-service:
-        condition: service_healthy
-      payment-service:
-        condition: service_healthy
-      realtime-service:
-        condition: service_healthy
     ports:
-      - "${GATEWAY_HTTP_PORT:-8080}:80"
+      - "127.0.0.1:${GATEWAY_HTTP_PORT:-8080}:80"
     volumes:
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infrastructure/nginx/proxy_params:/etc/nginx/proxy_params:ro

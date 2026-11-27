@@ -1,10 +1,14 @@
 {
   "name": "uber-clone-platform",
   "private": true,
-  "workspaces": ["backend/*"],
+  "workspaces": [
+    "backend/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:auth": "npm run build --workspace=@uber-clone/auth-service && node --env-file=.env --test backend/auth-service/tests/auth.integration.mjs",
+    "test:auth:gateway": "node --env-file=.env tests/e2e/auth.gateway.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
