@@ -9,7 +9,8 @@
     "typecheck": "npm run build --workspace=@uber-clone/shared && npm run typecheck --workspaces --if-present",
     "test:auth": "npm run build --workspace=@uber-clone/auth-service && node --env-file=.env --test backend/auth-service/tests/auth.integration.mjs",
     "test:auth:gateway": "node --env-file=.env tests/e2e/auth.gateway.mjs",
-    "test:user": "npm run build --workspace=@uber-clone/shared && npm run build --workspace=@uber-clone/user-service && node --env-file=.env --test backend/user-service/tests/user.integration.mjs"
+    "test:user": "npm run build --workspace=@uber-clone/shared && npm run build --workspace=@uber-clone/user-service && node --env-file=.env --test backend/user-service/tests/user.integration.mjs",
+    "test:driver": "npm run build --workspace=@uber-clone/shared && npm run build --workspace=@uber-clone/driver-service && node --env-file=.env --test backend/driver-service/tests/driver.integration.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

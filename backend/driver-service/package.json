@@ -13,6 +13,7 @@
     "@fastify/helmet": "^13.0.1",
     "fastify": "^5.2.1",
     "pg": "^8.13.3",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "@uber-clone/shared": "*"
   }
 }
