@@ -128,7 +128,7 @@ export async function registerAuthEndpoints(app: FastifyInstance) {
     reply.clearCookie(refreshCookie, cookieOptions());
     return { message: "You have been signed out." };
   });
-  app.get("/me", { preHandler: authenticate }, async (request) => {
+  app.get("/me", { preHandler: authenticate, config: { rateLimit: { max: 600, timeWindow: "1 minute" } } }, async (request) => {
     const result = await pool.query<Account>(
       "SELECT * FROM auth.users WHERE id=$1",
       [request.user.sub],

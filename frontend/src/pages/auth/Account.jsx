@@ -52,7 +52,7 @@ export default function Account() {
     });
   }
   return (
-    <main className="account-shell">
+    <section className="account-shell">
       <div className="account-top">
         <span className="eyebrow">
           {user.role === "driver" ? "DRIVER ACCOUNT" : "PASSENGER ACCOUNT"}
@@ -65,7 +65,7 @@ export default function Account() {
           Log out <LogOut size={16} aria-hidden="true" />
         </button>
       </div>
-      <h1>Welcome{user.name ? `, ${user.name.split(" ")[0]}` : " back"}.</h1>
+      <h1>Sign-in &amp; security</h1>
       <p className="intro">You’re signed in. Your next journey starts here.</p>
       <section className="account-card">
         <div className="avatar" aria-hidden="true">
@@ -173,6 +173,6 @@ export default function Account() {
       <p className="fine-print">
         Manage your sign-in details and keep your account secure.
       </p>
-    </main>
+    </section>
   );
 }

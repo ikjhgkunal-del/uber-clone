@@ -40,7 +40,7 @@ Implemented features:
 - Optional Google OAuth code flow with PKCE, state/nonce checks, server-side ID-token verification and provider-subject identity records.
 - Request validation, size limits, rate limits, custom-header/origin CSRF protection, no-store responses and sensitive log redaction.
 
-New accounts may access the account/security screen before verifying their email. Email verification must be required on future booking/driver business endpoints. Customer/driver profile creation and authorization in other services belong to their feature increments.
+New accounts may access the account/security screen before verifying their email. Email verification must be required on future booking/driver business endpoints. Passenger profiles now live in the User Service; driver onboarding belongs to the next increment.
 
 Google credentials are intentionally empty. A password account with the same email is not silently linked to a Google identity: use the password sign-in for that existing account. Account linking, phone OTP, Apple sign-in, MFA and real driver onboarding are not implemented.
 
@@ -86,6 +86,7 @@ With local PostgreSQL and Mailpit running and the root `.env` configured:
 npm run build
 npm run test:auth
 npm run test:auth:gateway
+npm run test:user
 npm --prefix frontend run build
 npm --prefix frontend run lint
 ```
@@ -96,15 +97,15 @@ For public deployment, use HTTPS, `COOKIE_SECURE=true`, the deployed origin/redi
 
 ## Lower resource development
 
-The default Compose stack runs only PostgreSQL, Authentication, the static frontend, Nginx and Mailpit. Keep this mode while working on authentication. Other services and their images remain available under the `full` profile.
+The default Compose stack runs PostgreSQL, Authentication, User Service, the static frontend, Nginx and Mailpit. Other services and their images remain available under the `full` profile.
 
 ```powershell
-# Daily auth development (5 containers)
+# Daily passenger development (6 containers)
 docker compose up -d
 # Full stack when working on ride/event features
 docker compose --profile full up -d
-# Return to auth mode without deleting data
-docker compose --profile full stop user-service driver-service ride-service payment-service realtime-service notification-service redis kafka
+# Stop optional services without deleting data
+docker compose --profile full stop driver-service ride-service payment-service realtime-service notification-service redis kafka
 # Stop the project when finished (preserves database volumes)
 docker compose --profile full stop
 ```
@@ -120,3 +121,22 @@ For WSL memory retained after builds, Docker recommends WSL `autoMemoryReclaim`.
 Use `lucide-react` for interface icons throughout the project, with named imports so only used icons are bundled. Use consistent SVG sizing/stroke widths and accessible labels on icon buttons. Prefer established libraries for standard behavior, selecting dependencies that fit the feature and resource budget.
 
 Brand marks remain separate from interface icons: the local Uber SVG wordmark is sourced from Simple Icons (`siUber`, installed as a development dependency), and the Google sign-in mark is a reusable multicolor SVG component. Do not use emoji or text arrows in place of UI icons. Maintain the Uber reference layout and reusable components as new pages are implemented.
+
+## Passenger accounts (User Service)
+
+Passengers land at `/passenger` after signing in. Overview, personal details, saved places, ride preferences and security are responsive on desktop and mobile. Saved places support a map or manual latitude/longitude; no device location permission is requested. Preferences are stored for future ride matching; rides themselves are not implemented yet.
+
+The `users` schema owns `customer_profiles`, `saved_locations` and `customer_preferences` in the local `uber_clone` database. Auth owns identity/email; User Service validates active sessions through Auth's HTTP API and accepts only the customer role. The identity UUID is an external reference, with no cross-service foreign key or direct reads of Auth tables. Profiles initialize idempotently on first access. Versioned migrations run at startup and preserve existing data. Profile/preference versions prevent stale updates; saved-place queries enforce ownership and transactional limits (20 total, one Home and one Work).
+
+All endpoints below use the gateway prefix `/api/users`, a Bearer access token and the same mutation header/origin policy as authentication:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET / PUT | `/me` | Read/update display name and optional international phone number |
+| GET / POST | `/me/places` | List/create saved places |
+| PUT / DELETE | `/me/places/:id` | Edit/remove an owned place |
+| GET / PUT | `/me/preferences` | Read/update ride preferences |
+
+Phone numbers are explicitly unverified. Email changes remain outside this component. Radix Dialog supplies modal focus trapping, Escape and accessibility; React Leaflet/Leaflet supplies maps, loaded only when needed. OpenStreetMap attribution is visible, with a tile-request referrer policy supporting its usage policy. `VITE_MAP_TILE_URL` may select another compatible tile provider; production deployments must follow their provider's terms/capacity limits.
+
+`npm run test:user` exercises PostgreSQL persistence, real Auth session introspection, RBAC, ownership, validation, stale versions, CSRF and concurrent saved-place limits using disposable local fixtures. Build Auth first with `npm run build`. The tests require Auth/gateway and local PostgreSQL running; fixtures never send SMTP email.

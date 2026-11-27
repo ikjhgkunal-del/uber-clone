@@ -1,3 +1,8 @@
+import PassengerLayout from "../components/layout/PassengerLayout";
+import PassengerDashboard from "../pages/passenger/Dashboard";
+import PassengerProfile from "../pages/passenger/Profile";
+import SavedPlaces from "../pages/passenger/SavedPlaces";
+import Preferences from "../pages/passenger/Preferences";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
@@ -43,7 +48,13 @@ export default function AppRoutes() {
       />
       <Route path="/auth/callback" element={<Callback />} />
       <Route element={<RoleRoute role="customer" />}>
-        <Route path="/passenger" element={<Account />} />
+        <Route path="/passenger" element={<PassengerLayout />}>
+          <Route index element={<PassengerDashboard />} />
+          <Route path="profile" element={<PassengerProfile />} />
+          <Route path="places" element={<SavedPlaces />} />
+          <Route path="preferences" element={<Preferences />} />
+          <Route path="security" element={<Account />} />
+        </Route>
       </Route>
       <Route element={<RoleRoute role="driver" />}>
         <Route path="/driver" element={<Account />} />

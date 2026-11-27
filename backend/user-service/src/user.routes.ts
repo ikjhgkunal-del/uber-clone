@@ -1,1 +1,1 @@
-// TODO: Register user profile routes and enforce customer ownership.
+export { userRoutes } from "./user.controller.js";

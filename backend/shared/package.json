@@ -6,9 +6,36 @@
     "kafkajs": "^2.2.4",
     "pino": "^9.6.0",
     "pg": "^8.13.3",
-    "redis": "^4.7.0"
+    "redis": "^4.7.0",
+    "fastify": "^5.2.1",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/helmet": "^13.0.1",
+    "@fastify/rate-limit": "^11.3.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.11"
+  },
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "exports": {
+    "./database": {
+      "types": "./dist/database.d.ts",
+      "default": "./dist/database.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
+    "./migrate": {
+      "types": "./dist/migrate.d.ts",
+      "default": "./dist/migrate.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    }
   }
 }
